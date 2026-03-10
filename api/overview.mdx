@@ -98,6 +98,63 @@ All endpoints follow a consistent error response pattern:
   </Card>
 </CardGroup>
 
+### Data Dragon
+
+<Card title="Get Version" icon="database" href="#data-dragon-version">
+  Retrieve the latest Data Dragon version for champion assets
+</Card>
+
+## Data Dragon Version
+
+<Endpoint method="GET" path="/api/ddragon/version" />
+
+Retrieves the latest Data Dragon version number from Riot's CDN. This version is used to construct URLs for champion icons, item images, and other game assets.
+
+### Authentication
+
+Does not require authentication. This endpoint is publicly accessible.
+
+### Response
+
+<ResponseField name="version" type="string" required>
+  The latest Data Dragon version (e.g., "14.1.1")
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/ddragon/version'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/ddragon/version');
+const { version } = await response.json();
+console.log(version); // "14.1.1"
+
+// Use version to construct champion icon URL
+const championIcon = `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/Ahri.png`;
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "version": "14.1.1"
+}
+```
+
+```json 502 Bad Gateway
+{
+  "error": "No versions"
+}
+```
+</CodeGroup>
+
+<Note>
+This endpoint caches the version for 1 hour to reduce load on Riot's Data Dragon API.
+</Note>
+
 ## AI Features
 
 Agent LoL includes optional AI-powered features when enabled:
