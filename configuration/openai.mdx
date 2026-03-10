@@ -1,0 +1,383 @@
+---
+title: 'OpenAI Integration'
+description: 'Enable AI-powered coaching and match analysis with OpenAI GPT-4'
+icon: 'brain'
+---
+
+## Overview
+
+Agent LoL integrates with OpenAI's GPT-4-mini model to provide intelligent match analysis and coaching feedback. This feature analyzes match timeline data and provides personalized insights about your early game performance.
+
+## Getting Your API Key
+
+### Step 1: Create an OpenAI Account
+
+1. Visit [platform.openai.com](https://platform.openai.com/)
+2. Sign up or log in with your account
+3. Navigate to [API Keys](https://platform.openai.com/api-keys)
+
+### Step 2: Generate an API Key
+
+1. Click "Create new secret key"
+2. Give it a descriptive name (e.g., "Agent LoL Development")
+3. Copy the key immediately - it won't be shown again
+
+<Warning>
+  Store your API key securely. OpenAI will only show it once during creation.
+</Warning>
+
+### Step 3: Configure Environment Variables
+
+Add these variables to your `.env.local` file:
+
+```bash
+OPENAI_KEY=sk-proj-your-openai-key-here
+ENABLE_MATCH_AGENT=true
+```
+
+## Configuration
+
+<ParamField path="OPENAI_KEY" type="string">
+  Your OpenAI API key with access to chat completions
+  
+  Required for AI features. The key must have permissions to use the Chat Completions API.
+
+  ```bash
+  OPENAI_KEY=sk-proj-abc123xyz789...
+  ```
+</ParamField>
+
+<ParamField path="ENABLE_MATCH_AGENT" type="boolean" default="false">
+  Feature flag to enable/disable AI coaching
+  
+  Set to `true` to activate the match context agent. When disabled, the application still fetches timeline data but skips AI analysis.
+
+  ```bash
+  ENABLE_MATCH_AGENT=true
+  ```
+</ParamField>
+
+<Note>
+  Both `OPENAI_KEY` and `ENABLE_MATCH_AGENT=true` must be configured for AI features to work. See `route.js:22-23` where these are checked.
+</Note>
+
+## AI Features
+
+When OpenAI integration is enabled, the application provides:
+
+### Timeline Comparison Analysis
+
+The AI agent analyzes early game performance by comparing you against your lane opponent:
+
+- **Gold differential** tracking from minute 0 to the comparison point
+- **CS (minion) differential** and farming efficiency
+- **XP and level progression** throughout early game
+- **Trend analysis** showing who gained advantages and when
+- **Actionable coaching tips** on what to improve
+
+### How It Works
+
+1. **Data Collection** - The `/api/riot/match/timeline/compare` endpoint fetches:
+   - Full match data from Riot API
+   - Minute-by-minute timeline frames
+   - Participant stats for you and your lane opponent
+
+2. **Frame Analysis** - The application builds progression data from minute 0 to `TIMELINE_COMPARE` (see `route.js:94-101`):
+   ```javascript
+   for (let i = 0; i <= frameIndex && i < frames.length; i++) {
+     const pf = frames[i]?.participantFrames ?? {};
+     userFramesFromStart.push({ minute: i, ...(pf[userParticipantId] ?? {}) });
+     enemyFramesFromStart.push({ minute: i, ...(pf[enemyParticipantId] ?? {}) });
+   }
+   ```
+
+3. **AI Coaching** - If OpenAI is enabled, the data is sent to GPT-4-mini with a specialized prompt (see `route.js:110-139`)
+
+## The AI Prompt
+
+The application uses a carefully crafted prompt to generate coaching feedback:
+
+### System Prompt
+
+```
+Eres un coach de League of Legends. Recibes la evolución minuto a minuto 
+(desde el minuto 0 hasta el minuto {frameMinute}) de dos jugadores en la 
+misma posición/rol.
+
+Analiza cómo fue la early game de cada uno: farm (minions), oro, nivel/XP 
+a lo largo del tiempo. Responde en español, en 4-6 frases: quién se fue 
+adelantando y en qué momento, tendencias (quién mejoró o empeoró), y una 
+conclusión breve con qué podría mejorar el que va atrás. Sé directo y útil.
+```
+
+### User Prompt
+
+```
+Rol/lane: {userRole}.
+
+Mi jugador ({userChampion}) - evolución desde min 0 hasta min {frameMinute}:
+{userFramesFromStart}
+
+Rival en la misma lane ({enemyChampion}) - evolución desde min 0 hasta min {frameMinute}:
+{enemyFramesFromStart}
+
+Dame feedback de la early game: cómo fue desde el inicio hasta el minuto {frameMinute}.
+```
+
+<Tip>
+  The prompt is currently in Spanish, coaching League of Legends players in LATAM. You can modify the system prompt in `route.js:122-123` to support other languages.
+</Tip>
+
+## Model Configuration
+
+The application uses OpenAI's **GPT-4o-mini** model for cost-effective analysis:
+
+```javascript route.js
+body: JSON.stringify({
+  model: 'gpt-4o-mini',
+  temperature: 0.4,
+  messages: [...]
+})
+```
+
+See `route.js:116-139` for the complete API call configuration.
+
+### Why GPT-4o-mini?
+
+- **Cost-effective**: ~$0.15 per 1M input tokens, $0.60 per 1M output tokens
+- **Fast**: Low latency for real-time analysis
+- **Sufficient**: Handles structured data analysis well
+- **Reliable**: Consistent coaching quality
+
+<Note>
+  Each analysis uses approximately 500-1000 input tokens (timeline data) and generates 100-200 output tokens (coaching feedback).
+</Note>
+
+## Cost Implications
+
+OpenAI charges based on token usage:
+
+### Estimated Costs per Analysis
+
+| Component | Tokens | Cost (GPT-4o-mini) |
+|-----------|--------|--------------------|
+| Input (timeline data) | ~750 | $0.0001125 |
+| Output (coaching) | ~150 | $0.00009 |
+| **Total per request** | ~900 | **~$0.0002** |
+
+### Monthly Cost Estimates
+
+| Usage | Analyses/Month | Estimated Cost |
+|-------|----------------|----------------|
+| Light (personal) | 100 | $0.02 |
+| Medium (active) | 1,000 | $0.20 |
+| Heavy (public) | 10,000 | $2.00 |
+
+<Tip>
+  For production deployments serving many users, consider implementing:
+  - Response caching for identical timeline analyses
+  - Rate limiting per user
+  - Usage quotas or premium tiers
+</Tip>
+
+## Response Structure
+
+The AI generates a 4-6 sentence analysis in Spanish covering:
+
+1. **Initial Comparison** - Who started ahead and why
+2. **Mid-Game Shift** - Key moments where advantages changed
+3. **Trend Analysis** - Who improved or fell behind over time
+4. **Coaching Tip** - Specific advice for the player who is behind
+
+### Example Response
+
+```
+En los primeros 3 minutos ambos jugadores estaban parejos en oro y CS, 
+pero a partir del minuto 4 el rival comenzó a tomar ventaja llegando a 
++15 CS y +300 oro. Tu campeón mantuvo buen nivel de XP pero el farmeo 
+se quedó atrás consistentemente. Para el minuto 7 la diferencia creció 
+a +25 CS. Recomendación: enfócate en no perder minions bajo torre y 
+busca tradeos favorables solo cuando tengas ventaja de oleada.
+```
+
+## Error Handling
+
+The application gracefully handles OpenAI errors:
+
+```javascript route.js
+try {
+  const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {...});
+  const openaiJson = await openaiRes.json();
+  
+  if (openaiRes.ok) {
+    comparison = openaiJson?.choices?.[0]?.message?.content?.trim() ?? null;
+  } else {
+    console.error('OpenAI timeline compare error:', openaiJson);
+  }
+} catch (err) {
+  console.error('Error calling OpenAI for timeline compare:', err);
+}
+```
+
+See `route.js:109-150` for complete error handling.
+
+<Note>
+  If OpenAI fails, the endpoint still returns timeline data without the `comparison` field. The UI should handle `null` comparison gracefully.
+</Note>
+
+## Disabling AI Features
+
+To disable AI coaching while keeping the rest of the app functional:
+
+### Option 1: Remove OpenAI Key
+
+```bash
+# Comment out or remove from .env.local
+# OPENAI_KEY=sk-...
+```
+
+### Option 2: Set Feature Flag to False
+
+```bash
+ENABLE_MATCH_AGENT=false
+```
+
+### Option 3: Both (Safest)
+
+```bash
+# OPENAI_KEY=sk-...
+ENABLE_MATCH_AGENT=false
+```
+
+When disabled, the `/api/riot/match/timeline/compare` endpoint will:
+- Still fetch match and timeline data from Riot API
+- Still calculate frame comparisons
+- Return `comparison: null` in the response
+- Skip the OpenAI API call entirely
+
+## Security Best Practices
+
+<Warning>
+  Never expose your OpenAI API key to the client. All API calls must be made from Next.js API routes.
+</Warning>
+
+### DO:
+- ✅ Store `OPENAI_KEY` in `.env.local` (gitignored)
+- ✅ Make OpenAI calls from Next.js API routes (`/app/api/*`)
+- ✅ Validate and sanitize user input before sending to OpenAI
+- ✅ Implement rate limiting for public deployments
+- ✅ Monitor usage in the [OpenAI dashboard](https://platform.openai.com/usage)
+
+### DON'T:
+- ❌ Use `NEXT_PUBLIC_OPENAI_KEY` (exposes to browser)
+- ❌ Make OpenAI calls from client components
+- ❌ Send raw user input without validation
+- ❌ Commit `.env.local` to version control
+
+## Testing the Integration
+
+1. Configure your environment variables:
+   ```bash
+   OPENAI_KEY=sk-proj-your-key
+   ENABLE_MATCH_AGENT=true
+   TIMELINE_COMPARE=180000
+   ```
+
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. View a match and navigate to the timeline comparison feature
+
+4. Check the server logs for OpenAI API calls:
+   ```
+   POST https://api.openai.com/v1/chat/completions
+   ```
+
+5. Verify the coaching feedback appears in the UI
+
+## Monitoring Usage
+
+Track your OpenAI usage and costs:
+
+1. Visit [platform.openai.com/usage](https://platform.openai.com/usage)
+2. View requests, token consumption, and costs
+3. Set up usage limits and alerts
+4. Monitor for unusual activity
+
+<Tip>
+  Set a monthly spending limit in your OpenAI account settings to prevent unexpected charges.
+</Tip>
+
+## Customizing the AI
+
+### Change the Language
+
+Modify the system prompt in `route.js:122-123`:
+
+```javascript
+content: `You are a League of Legends coach. You receive minute-by-minute 
+progression (from minute 0 to minute ${frameMinute}) of two players in the 
+same position/role...
+```
+
+### Adjust Temperature
+
+Control response creativity by modifying `route.js:118`:
+
+```javascript
+temperature: 0.4, // 0 = deterministic, 1 = creative
+```
+
+- **0.0-0.3**: More factual, consistent coaching
+- **0.4-0.6**: Balanced (current setting)
+- **0.7-1.0**: More creative, varied responses
+
+### Change the Model
+
+Upgrade to GPT-4 for potentially better analysis:
+
+```javascript
+model: 'gpt-4o', // More expensive but higher quality
+```
+
+<Warning>
+  GPT-4o costs significantly more than GPT-4o-mini (~15x). Test thoroughly before switching in production.
+</Warning>
+
+## Troubleshooting
+
+### "OpenAI timeline compare error"
+
+- Check your API key is valid and has credits
+- Verify the key has Chat Completions API access
+- Check the [OpenAI status page](https://status.openai.com/)
+
+### No coaching feedback appears
+
+- Ensure `ENABLE_MATCH_AGENT=true`
+- Verify `OPENAI_KEY` is set correctly
+- Check server logs for OpenAI errors
+- Confirm you have OpenAI API credits remaining
+
+### "Rate limit exceeded"
+
+- You've hit OpenAI's rate limits (tier-based)
+- Wait 60 seconds and try again
+- Consider implementing request queuing
+- Upgrade your OpenAI tier at [platform.openai.com/settings](https://platform.openai.com/settings/organization/billing/overview)
+
+### High costs
+
+- Implement response caching for identical requests
+- Add rate limiting per user
+- Consider switching to GPT-3.5-turbo (cheaper, lower quality)
+- Set up spending limits in OpenAI dashboard
+
+## API Reference
+
+For detailed OpenAI API documentation:
+- [Chat Completions API](https://platform.openai.com/docs/api-reference/chat)
+- [Model Pricing](https://openai.com/api/pricing/)
+- [Rate Limits](https://platform.openai.com/docs/guides/rate-limits)

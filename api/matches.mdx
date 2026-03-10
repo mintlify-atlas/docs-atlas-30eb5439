@@ -1,0 +1,266 @@
+---
+title: 'Match Endpoints'
+description: 'Retrieve match history and detailed match information'
+---
+
+## Overview
+
+The Match endpoints provide access to player match history and detailed match statistics. These endpoints interact with the Riot Games Match-v5 API to retrieve game data, participant information, and optional AI-generated analysis.
+
+## Get Match IDs
+
+<Endpoint method="GET" path="/api/riot/match/by-puuid/ids" />
+
+Retrieves a list of match IDs for a given player PUUID. This endpoint returns an array of match identifiers that can be used to fetch detailed match data.
+
+### Authentication
+
+Requires valid NextAuth session. Only allows querying the authenticated user's own PUUID.
+
+### Query Parameters
+
+<ParamField query="puuid" type="string" optional>
+  Player's PUUID to retrieve matches for. Defaults to current user's PUUID if not provided.
+</ParamField>
+
+<Warning>
+  You can only query your own PUUID. Attempting to query another player's PUUID will return `403 Forbidden`.
+</Warning>
+
+### Response
+
+Returns an array of match ID strings from the Riot API endpoint:
+`https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids`
+
+<ResponseField name="data" type="string[]" required>
+  Array of match IDs in format `NA1_1234567890`
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/riot/match/by-puuid/ids?puuid=abc123-def456' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_TOKEN'
+```
+
+```javascript JavaScript
+const puuid = 'abc123-def456-ghi789';
+const response = await fetch(`/api/riot/match/by-puuid/ids?puuid=${puuid}`);
+const matchIds = await response.json();
+console.log(matchIds); // ["NA1_1234567890", "NA1_0987654321", ...]
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+[
+  "NA1_4873621950",
+  "NA1_4873245678",
+  "NA1_4872987654",
+  "NA1_4872345612",
+  "NA1_4871098765"
+]
+```
+
+```json 403 Forbidden
+{
+  "error": "Forbidden"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Failed to fetch match IDs"
+}
+```
+</CodeGroup>
+
+---
+
+## Get Match Details
+
+<Endpoint method="GET" path="/api/riot/match/matchId" />
+
+Retrieves detailed match information for a specific match ID, including participant data, team statistics, and optional AI-generated match context analysis.
+
+### Authentication
+
+Requires valid NextAuth session.
+
+### Query Parameters
+
+<ParamField query="matchId" type="string" required>
+  Match identifier to retrieve details for (e.g., `NA1_4873621950`)
+</ParamField>
+
+### Response
+
+Returns the full Match-v5 data from Riot API:
+`https://americas.api.riotgames.com/lol/match/v5/matches/{matchId}`
+
+When AI features are enabled (`ENABLE_MATCH_AGENT=true`), the response includes an additional `analysis` field.
+
+<ResponseField name="metadata" type="object" required>
+  Match metadata including match ID, data version, and participant PUUIDs
+</ResponseField>
+
+<ResponseField name="info" type="object" required>
+  Detailed match information including game mode, duration, teams, and participants
+</ResponseField>
+
+<ResponseField name="info.participants" type="array" required>
+  Array of participant objects with detailed player statistics
+</ResponseField>
+
+<ResponseField name="analysis" type="object" optional>
+  AI-generated match analysis (only when `ENABLE_MATCH_AGENT=true` and `OPENAI_KEY` is configured)
+  
+  <Expandable title="properties">
+    <ResponseField name="context" type="string">
+      AI-generated context summary of the match in Spanish (3-6 sentences describing game mode, duration, pacing, team dominance, and key objectives)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Match Data Structure
+
+Each participant in `info.participants` contains:
+
+- `puuid`: Player's unique identifier
+- `championName`: Champion played
+- `kills`, `deaths`, `assists`: KDA statistics
+- `totalMinionsKilled`, `neutralMinionsKilled`: CS statistics
+- `goldEarned`, `totalDamageDealt`: Economic and damage metrics
+- `win`: Boolean indicating victory
+- `teamId`: Team number (100 or 200)
+- `teamPosition`, `individualPosition`: Lane/role information
+- `items0`-`items6`: Item build
+- `summoner1Id`, `summoner2Id`: Summoner spells
+- And many more detailed statistics
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/riot/match/matchId?matchId=NA1_4873621950' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_TOKEN'
+```
+
+```javascript JavaScript
+const matchId = 'NA1_4873621950';
+const response = await fetch(`/api/riot/match/matchId?matchId=${matchId}`);
+const matchData = await response.json();
+
+// Access participant data
+const participants = matchData.info.participants;
+participants.forEach(p => {
+  console.log(`${p.championName}: ${p.kills}/${p.deaths}/${p.assists}`);
+});
+
+// Check for AI analysis
+if (matchData.analysis?.context) {
+  console.log('AI Context:', matchData.analysis.context);
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response (excerpt)
+{
+  "metadata": {
+    "dataVersion": "2",
+    "matchId": "NA1_4873621950",
+    "participants": [
+      "abc123-def456-ghi789-jkl012-mno345",
+      "..."
+    ]
+  },
+  "info": {
+    "gameCreation": 1678901234567,
+    "gameDuration": 1847,
+    "gameMode": "CLASSIC",
+    "gameType": "MATCHED_GAME",
+    "queueId": 420,
+    "participants": [
+      {
+        "puuid": "abc123-def456-ghi789-jkl012-mno345",
+        "championName": "Jinx",
+        "kills": 12,
+        "deaths": 3,
+        "assists": 8,
+        "totalMinionsKilled": 247,
+        "goldEarned": 15432,
+        "win": true,
+        "teamId": 100,
+        "teamPosition": "BOTTOM",
+        "riotIdGameName": "PlayerName",
+        "riotIdTagline": "NA1"
+      }
+    ],
+    "teams": [
+      {
+        "teamId": 100,
+        "win": true
+      },
+      {
+        "teamId": 200,
+        "win": false
+      }
+    ]
+  },
+  "analysis": {
+    "context": "Esta partida fue un juego clasificado (Ranked Solo/Duo) de 30 minutos con ritmo acelerado. El equipo azul dominó desde el inicio con ventaja en dragones y torres, logrando una ventaja de oro sostenida. El equipo rojo intentó contraatacar en la mid game pero no logró recuperar el control de objetivos clave."
+  }
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "matchId is required"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Failed to fetch match details"
+}
+```
+</CodeGroup>
+
+## AI Match Context
+
+When AI features are enabled, the `/api/riot/match/matchId` endpoint uses OpenAI GPT-5.1 to generate a contextual summary of the match:
+
+<Steps>
+  <Step title="Enable AI Features">
+    Set environment variables:
+    - `ENABLE_MATCH_AGENT=true`
+    - `OPENAI_KEY=your-openai-api-key`
+  </Step>
+  
+  <Step title="Automatic Analysis">
+    The API automatically sends match data to OpenAI for analysis
+  </Step>
+  
+  <Step title="Context Response">
+    Receive 3-6 sentence summary in Spanish describing:
+    - Game mode and type
+    - Match duration and pacing
+    - Team dominance patterns
+    - Key objective control
+    - General game flow
+  </Step>
+</Steps>
+
+<Note>
+  The AI context is generated server-side and focuses on match-level analysis, not individual player coaching. For player-specific coaching, see the [Timeline Compare](/api/timeline#timeline-compare) endpoint.
+</Note>
+
+## Typical Workflow
+
+1. Get match IDs from `/api/riot/match/by-puuid/ids`
+2. Iterate through match IDs to fetch detailed data
+3. Parse participant data to find specific player statistics
+4. Display match results with optional AI context
+5. Use match data to feed timeline analysis endpoints

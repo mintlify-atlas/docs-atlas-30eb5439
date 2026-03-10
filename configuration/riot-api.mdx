@@ -1,0 +1,239 @@
+---
+title: 'Riot API Setup'
+description: 'Configure your Riot Games API key for League of Legends match data'
+icon: 'key'
+---
+
+## Getting Your API Key
+
+Agent LoL requires a Riot Games API key to fetch match data, summoner information, and game timelines.
+
+### Step 1: Create a Riot Developer Account
+
+1. Visit [developer.riotgames.com](https://developer.riotgames.com/)
+2. Sign in with your Riot Games account
+3. Accept the Developer Terms of Service
+
+### Step 2: Generate an API Key
+
+Once logged in, you'll see your API key on the dashboard:
+
+<Note>
+  Development API keys are shown immediately and regenerate automatically every 24 hours.
+</Note>
+
+```bash
+API_KEY=RGAPI-12345678-abcd-1234-abcd-123456789abc
+```
+
+Add this to your `.env.local` file.
+
+## Development vs Production Keys
+
+### Development Keys
+
+**Characteristics:**
+- Expire every 24 hours at midnight Pacific Time
+- Rate limit: 20 requests per second, 100 requests per 2 minutes
+- Free and automatically available
+- Sufficient for local development and testing
+
+<Warning>
+  Development keys expire daily. You must regenerate your key from the developer portal and update your `.env.local` file each day.
+</Warning>
+
+### Production Keys
+
+**Characteristics:**
+- Do not expire
+- Higher rate limits (varies by tier)
+- Requires application and approval from Riot Games
+- Intended for public-facing applications
+
+<Tip>
+  Apply for a production key at [developer.riotgames.com/app-type](https://developer.riotgames.com/app-type) once your application is ready for public use.
+</Tip>
+
+## Rate Limits
+
+All API keys have rate limits to prevent abuse:
+
+| Key Type | Per Second | Per 2 Minutes |
+|----------|------------|---------------|
+| Development | 20 | 100 |
+| Personal (Tier 1) | 20 | 100 |
+| Production (Tier 2+) | Varies | Varies |
+
+### Handling Rate Limits
+
+The application makes multiple API calls per match view:
+- Match details (`/lol/match/v5/matches/{matchId}`)
+- Timeline data (`/lol/match/v5/matches/{matchId}/timeline`)
+- Account verification during authentication
+
+<Note>
+  If you encounter rate limit errors (HTTP 429), the auth flow in `auth.js:59` will return a user-friendly message: "Too many requests. Please try again later."
+</Note>
+
+## Finding Your Riot ID
+
+Your Riot ID consists of two parts: **Game Name** and **Tag Line**.
+
+### In the League Client
+
+1. Open League of Legends
+2. Look at the top-right corner
+3. Your Riot ID appears as `GameName#TAG`
+
+Example: `Faker#KR1`
+- **GAME_NAME**: `Faker`
+- **TAG_LINE**: `KR1`
+
+### In Game
+
+Press Tab during a match - your Riot ID is shown next to your champion name.
+
+### Environment Variable Format
+
+```bash
+GAME_NAME=Faker
+TAG_LINE=KR1
+```
+
+<Warning>
+  Do **not** include the `#` symbol in `TAG_LINE` - the application strips it automatically in `auth.js:14`.
+</Warning>
+
+## Authentication Flow
+
+Agent LoL uses NextAuth.js with a custom Credentials provider to authenticate users via the Riot API.
+
+### How It Works
+
+1. **User Login** - Users provide their Game Name, Tag Line, and API Key
+2. **Validation** - Credentials are validated in `auth.js:10-19`:
+   - Game Name must be at least 2 characters
+   - Tag Line is required
+   - API Key is required
+3. **Riot API Verification** - The application calls the Riot Account API:
+   ```
+   GET https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}
+   ```
+4. **PUUID Retrieval** - If successful, the user's PUUID is stored in the JWT session
+5. **Session Storage** - The API key is stored securely in the JWT and never exposed to the client (`auth.js:101`)
+
+### Error Handling
+
+The authentication flow handles common API errors:
+
+| Status Code | Error Message | Cause |
+|-------------|---------------|-------|
+| 401 | Invalid API key or Riot account | Wrong API key or credentials |
+| 403 | API key forbidden or rate limited | Key revoked or rate limit hit |
+| 404 | Riot ID not found | Incorrect Game Name or Tag Line |
+| 429 | Too many requests | Rate limit exceeded |
+
+See `auth.js:48-62` for the complete error handling logic.
+
+### Session Configuration
+
+Sessions are configured with:
+- **Strategy**: JWT (JSON Web Tokens)
+- **Max Age**: 30 days
+- **Update Age**: 24 hours (session refreshes daily)
+
+See `auth.js:81-85` for session settings.
+
+## API Key Security
+
+<Warning>
+  Your API key is sensitive. Never commit it to version control or share it publicly.
+</Warning>
+
+### Best Practices
+
+1. **Use `.env.local`** - This file is gitignored by default
+2. **Never use `NEXT_PUBLIC_` prefix** - This exposes variables to the browser
+3. **Secure JWT Storage** - The API key is stored in the JWT token (server-side) and never sent to the client (`auth.js:76`)
+4. **Server-Side API Calls** - All Riot API requests are made from Next.js API routes, not the browser
+
+### Verifying Security
+
+The application ensures the API key is never exposed:
+
+```javascript auth.js
+async session({ session, token }) {
+  if (session.user) {
+    session.user.puuid = token.puuid;
+    session.user.gameName = token.gameName;
+    session.user.tagLine = token.tagLine;
+    // apiKey is intentionally NOT exposed to the client
+  }
+  return session;
+}
+```
+
+This callback at `auth.js:96-104` explicitly omits the API key from the client-accessible session.
+
+## Testing Your Configuration
+
+1. Add your credentials to `.env.local`:
+   ```bash
+   API_KEY=RGAPI-your-key-here
+   GAME_NAME=YourName
+   TAG_LINE=NA1
+   AUTH_SECRET=your-secret
+   ```
+
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Navigate to `/login` and sign in with your credentials
+
+4. If successful, you'll be redirected to the dashboard and can view match history
+
+## Troubleshooting
+
+### "Invalid API key or Riot account"
+
+- Verify your API key is current (dev keys expire daily)
+- Check for typos or extra whitespace
+- Ensure you're using the key from [developer.riotgames.com](https://developer.riotgames.com/)
+
+### "Riot ID not found"
+
+- Double-check your Game Name and Tag Line
+- Ensure TAG_LINE doesn't include the `#` symbol
+- Verify you're using your Riot ID, not your old summoner name
+
+### "Too many requests"
+
+- You've hit the rate limit (20 requests/second for dev keys)
+- Wait 2 minutes and try again
+- Consider implementing request queuing for production use
+
+### "API key forbidden"
+
+- Your API key may have been revoked
+- Regenerate your key at [developer.riotgames.com](https://developer.riotgames.com/)
+- Check that you accepted the Developer Terms of Service
+
+## Regional Endpoints
+
+The application uses regional routing for Riot API calls:
+
+- **Account API**: `americas.api.riotgames.com` (used in `auth.js:4-5`)
+- **Match API**: `americas.api.riotgames.com` (used in timeline compare route)
+
+<Note>
+  The Americas routing value covers NA, BR, LAN, LAS, and OCE regions. For other regions (Europe, Asia), you may need to modify the API base URLs in the source code.
+</Note>
+
+## API Documentation
+
+For detailed API documentation, visit:
+- [Riot Games API Reference](https://developer.riotgames.com/apis)
+- [Account-V1 API](https://developer.riotgames.com/apis#account-v1)
+- [Match-V5 API](https://developer.riotgames.com/apis#match-v5)

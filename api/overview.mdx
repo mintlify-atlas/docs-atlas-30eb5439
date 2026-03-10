@@ -1,0 +1,125 @@
+---
+title: 'API Overview'
+description: 'Introduction to the Agent LoL API for League of Legends match data and AI coaching'
+---
+
+## Introduction
+
+The Agent LoL API provides programmatic access to League of Legends match data, player statistics, and AI-powered coaching insights. Built on top of the Riot Games API, it offers authenticated endpoints for retrieving account information, match history, detailed match data, and timeline analysis.
+
+## Authentication
+
+All API endpoints require authentication via **NextAuth session**. The API uses the `getRiotSessionOrFail` helper to validate:
+
+- Active user session
+- Valid Riot API key
+- User PUUID (Player Universally Unique Identifier)
+
+Unauthenticated requests will return a `401 Unauthorized` response.
+
+## Base URL
+
+```
+/api/riot/
+```
+
+All endpoints are relative to this base path in the Next.js application.
+
+## Rate Limiting
+
+The API is subject to **Riot Games API rate limits**:
+
+- Rate limits vary by endpoint and API key tier
+- Default caching is disabled (`cache: 'no-store'`) for real-time data
+- Consider implementing client-side caching for frequently accessed data
+
+## Error Handling
+
+All endpoints follow a consistent error response pattern:
+
+<CodeGroup>
+```json 400 Bad Request
+{
+  "error": "matchId is required"
+}
+```
+
+```json 403 Forbidden
+{
+  "error": "Forbidden"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Current user not found in match participants"
+}
+```
+
+```json 500 Internal Server Error
+{
+  "error": "Error message details"
+}
+```
+</CodeGroup>
+
+## Available Endpoints
+
+### Account Management
+
+<CardGroup cols={2}>
+  <Card title="Get PUUID" icon="user" href="/api/account#get-puuid">
+    Retrieve current user's PUUID and Riot ID
+  </Card>
+  <Card title="Get Riot ID" icon="id-card" href="/api/account#get-riot-id">
+    Fetch Riot ID details by PUUID
+  </Card>
+</CardGroup>
+
+### Match Data
+
+<CardGroup cols={2}>
+  <Card title="Match IDs" icon="list" href="/api/matches#get-match-ids">
+    Get list of match IDs for a player
+  </Card>
+  <Card title="Match Details" icon="gamepad" href="/api/matches#get-match-details">
+    Retrieve detailed match information with AI context
+  </Card>
+</CardGroup>
+
+### Timeline Analysis
+
+<CardGroup cols={2}>
+  <Card title="Match Timeline" icon="clock" href="/api/timeline#get-timeline">
+    Get frame-by-frame match timeline data
+  </Card>
+  <Card title="AI Comparison" icon="brain" href="/api/timeline#timeline-compare">
+    Compare player performance with AI coaching insights
+  </Card>
+</CardGroup>
+
+## AI Features
+
+Agent LoL includes optional AI-powered features when enabled:
+
+<ParamField query="ENABLE_MATCH_AGENT" type="boolean" default="false">
+  Enable AI coaching features for match analysis
+</ParamField>
+
+<ParamField query="OPENAI_KEY" type="string">
+  OpenAI API key for AI analysis features
+</ParamField>
+
+When enabled, certain endpoints return additional `analysis` or `comparison` fields with AI-generated coaching insights.
+
+## Response Formats
+
+All successful responses return JSON data. Response schemas are documented on individual endpoint pages.
+
+## Getting Started
+
+1. Authenticate with NextAuth
+2. Retrieve your PUUID from `/api/riot/account/get-puuid`
+3. Fetch match IDs from `/api/riot/match/by-puuid/ids`
+4. Get detailed match data from `/api/riot/match/matchId`
+5. Analyze timeline data with `/api/riot/match/timeline/compare`

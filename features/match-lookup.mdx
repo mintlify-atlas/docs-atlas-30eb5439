@@ -1,0 +1,245 @@
+---
+title: Match Lookup
+description: Search for League of Legends matches by summoner name and view match history
+icon: magnifying-glass
+---
+
+## Overview
+
+The Match Lookup feature allows users to search for League of Legends matches using their Riot ID (gameName + tagLine). The system fetches data from the Riot Games API and displays detailed match information including participants, statistics, and game outcomes.
+
+<Note>
+Match lookup requires a valid Riot API key configured in your environment variables.
+</Note>
+
+## How It Works
+
+The match lookup process follows a multi-step flow to retrieve and display match data:
+
+<Steps>
+  <Step title="User Authentication">
+    Users sign in with their Riot ID, which includes their game name and tag line (e.g., `PlayerName#NA1`).
+  </Step>
+  
+  <Step title="PUUID Resolution">
+    The system resolves the Riot ID to a PUUID (Player Universally Unique Identifier) which is used for all subsequent API calls.
+  </Step>
+  
+  <Step title="Fetch Match IDs">
+    Using the PUUID, the system fetches a list of recent match IDs from the Riot API.
+    
+    ```javascript
+    // src/services/match.js:7-17
+    export async function fetchMatchIds(puuid) {
+      console.log('fetchMatchIds', puuid);
+      const response = await fetch(`/api/riot/match/by-puuid/ids?puuid=${puuid}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw data;
+      }
+
+      return Array.isArray(data) ? data : [];
+    }
+    ```
+  </Step>
+  
+  <Step title="Retrieve Match Details">
+    For each match ID, the system fetches comprehensive match details including participants, teams, and game outcome.
+    
+    ```javascript
+    // src/services/match.js:25-34
+    export async function fetchMatchDetails(matchId) {
+      const response = await fetch(`/api/riot/match/matchId?matchId=${matchId}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw data;
+      }
+
+      return data;
+    }
+    ```
+  </Step>
+  
+  <Step title="Display Match Data">
+    The UI displays the latest match with participant information, stats, and a link to view the 2.5D replay.
+  </Step>
+</Steps>
+
+## User Interface
+
+### Home Screen
+
+The home screen (`HomeContent.js`) displays the authenticated user's information and their latest match:
+
+```jsx
+// src/components/HomeContent.js:30-50
+{user && (
+  <>
+    <section className="mb-8">
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">
+        Summoner
+      </h2>
+      <div className="rounded-xl bg-slate-800/50 border border-slate-700/50 p-5 sm:p-6 shadow-lg">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <span className="text-xl font-bold text-white">
+            {gameName ?? '—'}
+          </span>
+          <span className="text-slate-400">#{tagLine ?? '—'}</span>
+        </div>
+      </div>
+    </section>
+
+    <LatestMatch
+      puuid={puuid}
+      userGameName={gameName}
+      userTagLine={tagLine}
+    />
+  </>
+)}
+```
+
+### Latest Match Component
+
+The `LatestMatch` component handles the data fetching and display logic:
+
+```jsx
+// src/components/LatestMatch.js:17-30
+const matchIdsQuery = useQuery({
+  queryKey: queryKeys.matchIds(puuid),
+  queryFn: () => fetchMatchIds(puuid),
+  enabled: !!puuid,
+});
+
+const firstMatchId = matchIdsQuery.data?.[0] ?? null;
+const matchDetailsEnabled = !!firstMatchId;
+const matchDetailsQuery = useQuery({
+  queryKey: queryKeys.matchDetails(firstMatchId),
+  queryFn: () => fetchMatchDetails(firstMatchId),
+  staleTime: 300000, // 5 minutes
+  enabled: matchDetailsEnabled && !!firstMatchId,
+});
+```
+
+<Tip>
+Match details are cached for 5 minutes (`staleTime: 300000`) to reduce API calls and improve performance.
+</Tip>
+
+### Match Display
+
+The match card shows key information at a glance:
+
+```jsx
+// src/components/LatestMatch.js:105-125
+<div className="rounded-xl bg-slate-800/50 border border-slate-700/50 overflow-hidden shadow-lg">
+  {/* Match header */}
+  <div className="px-5 py-4 sm:px-6 border-b border-slate-700/50 flex flex-wrap items-center gap-4">
+    <span className="text-slate-400 text-sm">
+      {gameDurationMin}m {gameDurationSec}s
+    </span>
+    <span
+      className="text-xs text-slate-500 font-mono truncate max-w-[180px] sm:max-w-none"
+      title={matchDetails?.metadata?.matchId}
+    >
+      {matchDetails?.metadata?.matchId}
+    </span>
+    {firstMatchId && (
+      <Link
+        href={`/replay?matchId=${encodeURIComponent(firstMatchId)}`}
+        className="ml-auto text-sm font-medium text-amber-400 hover:text-amber-300"
+      >
+        View 2.5D replay
+      </Link>
+    )}
+  </div>
+  <Participants
+    participants={participants}
+    ddragonVersion={ddragonVersion}
+    currentUserGameName={userGameName}
+    currentUserTagLine={userTagLine}
+  />
+</div>
+```
+
+## Match History Limits
+
+<Warning>
+The Riot API has rate limits and match history restrictions:
+- By default, the API returns the most recent matches
+- Free tier API keys have lower rate limits
+- Match data may not be immediately available for very recent games
+</Warning>
+
+### Query Configuration
+
+The application uses React Query for efficient data fetching and caching:
+
+```javascript
+// src/components/LatestMatch.js:12-21
+const ddragonQuery = useQuery({
+  queryKey: queryKeys.ddragon,
+  queryFn: fetchDdragonVersion,
+});
+
+const matchIdsQuery = useQuery({
+  queryKey: queryKeys.matchIds(puuid),
+  queryFn: () => fetchMatchIds(puuid),
+  enabled: !!puuid,
+});
+```
+
+## Loading States
+
+The UI provides clear feedback during data fetching:
+
+```jsx
+// src/components/LatestMatch.js:64-76
+if (loading && !error) {
+  return (
+    <section>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">
+        Latest match
+      </h2>
+      <div className="flex items-center gap-3 rounded-xl bg-slate-800/60 border border-slate-700/60 px-6 py-8">
+        <div className="h-5 w-5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+        <span className="text-slate-300">Loading match details…</span>
+      </div>
+    </section>
+  );
+}
+```
+
+## Error Handling
+
+Robust error handling ensures users receive helpful feedback when something goes wrong:
+
+```jsx
+// src/components/LatestMatch.js:77-91
+if (error) {
+  return (
+    <section>
+      <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-500 mb-3">
+        Latest match
+      </h2>
+      <div className="rounded-xl bg-red-950/40 border border-red-800/60 px-6 py-4 text-red-200">
+        <p className="font-medium">Failed to load match</p>
+        <p className="mt-1 text-sm text-red-300/90">
+          {error?.status?.message ?? error?.message ?? JSON.stringify(error)}
+        </p>
+      </div>
+    </section>
+  );
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Stats Analysis" icon="chart-line" href="/features/stats-analysis">
+    Learn how to analyze detailed match statistics
+  </Card>
+  <Card title="AI Coaching" icon="robot" href="/features/ai-coaching">
+    Get AI-powered coaching recommendations
+  </Card>
+</CardGroup>

@@ -1,0 +1,412 @@
+---
+title: 'Timeline Endpoints'
+description: 'Access frame-by-frame match timeline data and AI-powered player comparisons'
+---
+
+## Overview
+
+The Timeline endpoints provide granular, frame-by-frame data for match analysis. Each frame represents one minute of game time and includes detailed statistics for all participants. The AI comparison endpoint offers personalized coaching insights by analyzing early-game performance against lane opponents.
+
+## Understanding Timeline Frames
+
+Timeline data is structured as a series of frames, where each frame represents a snapshot at a specific minute:
+
+- **Frame 0**: Game start (0:00)
+- **Frame 1**: First minute (1:00)
+- **Frame N**: Nth minute of the game
+- **Frame interval**: 60,000 milliseconds (1 minute)
+
+Each frame contains:
+- `participantFrames`: Stats for all 10 players
+- `events`: Game events (kills, objectives, item purchases)
+- `timestamp`: Milliseconds since game start
+
+---
+
+## Get Timeline
+
+<Endpoint method="GET" path="/api/riot/match/timeline" />
+
+Retrieves the complete frame-by-frame timeline for a specific match, including all participant statistics and game events.
+
+### Authentication
+
+Requires valid NextAuth session.
+
+### Query Parameters
+
+<ParamField query="matchId" type="string" required>
+  Match identifier to retrieve timeline for (e.g., `NA1_4873621950`)
+</ParamField>
+
+### Response
+
+Returns the full Match Timeline-v5 data from Riot API:
+`https://americas.api.riotgames.com/lol/match/v5/matches/{matchId}/timeline`
+
+<ResponseField name="metadata" type="object" required>
+  Timeline metadata including match ID and data version
+</ResponseField>
+
+<ResponseField name="info" type="object" required>
+  Timeline information containing frames and game length
+  
+  <Expandable title="properties">
+    <ResponseField name="frameInterval" type="number">
+      Milliseconds between frames (typically 60000)
+    </ResponseField>
+    
+    <ResponseField name="frames" type="array">
+      Array of frame objects, one per minute of the game
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Frame Structure
+
+Each frame in `info.frames` contains:
+
+<ResponseField name="participantFrames" type="object" required>
+  Object keyed by participant ID ("1" through "10") with stats:
+  - `participantId`: Player number (1-10)
+  - `level`: Champion level
+  - `currentGold`, `totalGold`: Gold statistics
+  - `xp`: Experience points
+  - `minionsKilled`, `jungleMinionsKilled`: CS counts
+  - `position`: {x, y} coordinates on map
+  - `championStats`: Detailed combat stats
+</ResponseField>
+
+<ResponseField name="events" type="array" required>
+  Array of game events that occurred in this frame:
+  - `CHAMPION_KILL`: Champion deaths
+  - `BUILDING_KILL`: Tower/inhibitor destruction
+  - `ELITE_MONSTER_KILL`: Dragon/Baron/Herald
+  - `ITEM_PURCHASED`, `ITEM_SOLD`: Item transactions
+  - `WARD_PLACED`, `WARD_KILL`: Vision control
+  - `SKILL_LEVEL_UP`: Ability upgrades
+</ResponseField>
+
+<ResponseField name="timestamp" type="number" required>
+  Milliseconds since game start for this frame
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/riot/match/timeline?matchId=NA1_4873621950' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_TOKEN'
+```
+
+```javascript JavaScript
+const matchId = 'NA1_4873621950';
+const response = await fetch(`/api/riot/match/timeline?matchId=${matchId}`);
+const timeline = await response.json();
+
+// Access frame data
+const firstMinute = timeline.info.frames[1];
+console.log('Player 1 at 1 minute:', firstMinute.participantFrames['1']);
+
+// Find all kills in first 10 minutes
+timeline.info.frames.slice(0, 11).forEach((frame, i) => {
+  const kills = frame.events.filter(e => e.type === 'CHAMPION_KILL');
+  if (kills.length > 0) {
+    console.log(`Minute ${i}: ${kills.length} kills`);
+  }
+});
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response (excerpt)
+{
+  "metadata": {
+    "dataVersion": "2",
+    "matchId": "NA1_4873621950",
+    "participants": ["...", "..."]
+  },
+  "info": {
+    "frameInterval": 60000,
+    "frames": [
+      {
+        "timestamp": 0,
+        "participantFrames": {
+          "1": {
+            "participantId": 1,
+            "level": 1,
+            "currentGold": 500,
+            "totalGold": 500,
+            "xp": 0,
+            "minionsKilled": 0,
+            "jungleMinionsKilled": 0,
+            "position": { "x": 1234, "y": 5678 }
+          },
+          "2": { "..." }
+        },
+        "events": []
+      },
+      {
+        "timestamp": 60000,
+        "participantFrames": {
+          "1": {
+            "participantId": 1,
+            "level": 2,
+            "currentGold": 782,
+            "totalGold": 950,
+            "xp": 456,
+            "minionsKilled": 18,
+            "jungleMinionsKilled": 0
+          }
+        },
+        "events": [
+          {
+            "type": "SKILL_LEVEL_UP",
+            "timestamp": 45000,
+            "participantId": 1,
+            "skillSlot": 1
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "matchId is required"
+}
+```
+</CodeGroup>
+
+---
+
+## Timeline Compare
+
+<Endpoint method="GET" path="/api/riot/match/timeline/compare" />
+
+Compares the authenticated player's early-game performance against their lane opponent using AI coaching. This endpoint analyzes minute-by-minute progression data and provides personalized feedback on farming, gold generation, and experience gain.
+
+### Authentication
+
+Requires valid NextAuth session.
+
+### Query Parameters
+
+<ParamField query="matchId" type="string" required>
+  Match identifier to analyze (e.g., `NA1_4873621950`)
+</ParamField>
+
+<ParamField query="gameName" type="string" optional>
+  Player's Riot ID game name. Defaults to authenticated user's game name.
+</ParamField>
+
+<ParamField query="tagLine" type="string" optional>
+  Player's Riot ID tag line. Defaults to authenticated user's tag line.
+</ParamField>
+
+### Configuration
+
+The comparison timeframe is controlled by the `TIMELINE_COMPARE` environment variable:
+
+<ParamField query="TIMELINE_COMPARE" type="number" default="0">
+  Milliseconds from game start to analyze. Converts to frame index (e.g., 600000ms = 10 minutes = frame 10)
+</ParamField>
+
+### How It Works
+
+<Steps>
+  <Step title="Player Identification">
+    Finds the specified player in match participants by matching `gameName` and `tagLine`
+  </Step>
+  
+  <Step title="Lane Opponent Detection">
+    Identifies the enemy player in the same role/position using `teamPosition` or `individualPosition`
+  </Step>
+  
+  <Step title="Frame Collection">
+    Collects minute-by-minute statistics from frame 0 to the configured comparison timeframe
+  </Step>
+  
+  <Step title="AI Analysis">
+    When AI features are enabled, sends progression data to OpenAI GPT-4o-mini for comparative analysis
+  </Step>
+</Steps>
+
+### Response
+
+<ResponseField name="role" type="string" required>
+  Player's lane/position (e.g., "BOTTOM", "MIDDLE", "TOP", "JUNGLE", "UTILITY")
+</ResponseField>
+
+<ResponseField name="frameMinute" type="number" required>
+  The minute (frame index) used for comparison
+</ResponseField>
+
+<ResponseField name="userChampion" type="string" required>
+  Champion played by the queried player
+</ResponseField>
+
+<ResponseField name="enemyChampion" type="string" required>
+  Champion played by the lane opponent
+</ResponseField>
+
+<ResponseField name="userFrame" type="object" required>
+  Player's statistics at the comparison frame, including:
+  - `level`: Champion level
+  - `currentGold`, `totalGold`: Gold stats
+  - `xp`: Experience points
+  - `minionsKilled`, `jungleMinionsKilled`: CS counts
+  - `position`: Map coordinates
+</ResponseField>
+
+<ResponseField name="enemyFrame" type="object" required>
+  Enemy player's statistics at the comparison frame (same structure as userFrame)
+</ResponseField>
+
+<ResponseField name="comparison" type="string" optional>
+  AI-generated coaching feedback in Spanish (4-6 sentences) analyzing:
+  - Who gained advantages and when
+  - CS, gold, and XP progression trends
+  - Moments where one player improved or fell behind
+  - Actionable advice for improvement
+  
+  Only present when `ENABLE_MATCH_AGENT=true` and `OPENAI_KEY` is configured
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/riot/match/timeline/compare?matchId=NA1_4873621950&gameName=PlayerName&tagLine=NA1' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_TOKEN'
+```
+
+```javascript JavaScript
+const matchId = 'NA1_4873621950';
+const gameName = 'PlayerName';
+const tagLine = 'NA1';
+
+const params = new URLSearchParams({ matchId, gameName, tagLine });
+const response = await fetch(`/api/riot/match/timeline/compare?${params}`);
+const comparison = await response.json();
+
+console.log(`Lane: ${comparison.role}`);
+console.log(`${comparison.userChampion} vs ${comparison.enemyChampion}`);
+console.log(`Your CS: ${comparison.userFrame.minionsKilled}`);
+console.log(`Enemy CS: ${comparison.enemyFrame.minionsKilled}`);
+
+if (comparison.comparison) {
+  console.log('AI Coaching:', comparison.comparison);
+}
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "role": "BOTTOM",
+  "frameMinute": 10,
+  "userChampion": "Jinx",
+  "enemyChampion": "Ashe",
+  "userFrame": {
+    "participantId": 1,
+    "level": 8,
+    "currentGold": 1250,
+    "totalGold": 4832,
+    "xp": 5643,
+    "minionsKilled": 87,
+    "jungleMinionsKilled": 0,
+    "position": { "x": 12345, "y": 3456 }
+  },
+  "enemyFrame": {
+    "participantId": 6,
+    "level": 8,
+    "currentGold": 980,
+    "totalGold": 4456,
+    "xp": 5401,
+    "minionsKilled": 79,
+    "jungleMinionsKilled": 0,
+    "position": { "x": 2345, "y": 11234 }
+  },
+  "comparison": "Durante los primeros 10 minutos, Jinx logró una ventaja sostenida sobre Ashe en farm y oro. Desde el minuto 3, Jinx comenzó a adelantarse en CS (87 vs 79 al minuto 10), traduciendo esto en una ventaja de oro de aproximadamente 400. Ambos jugadores mantuvieron un nivel similar, pero la diferencia en minions es significativa. Ashe debería enfocarse en mejorar su técnica de last-hit bajo presión y considerar pedir ayuda del jungla para aliviar la presión en lane."
+}
+```
+
+```json 400 Bad Request
+{
+  "error": "matchId is required"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Current user not found in match participants"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "No enemy found in the same role"
+}
+```
+</CodeGroup>
+
+## AI Coaching Features
+
+The Timeline Compare endpoint provides the most detailed AI coaching in Agent LoL:
+
+### Analysis Scope
+
+- **Minute-by-minute progression**: Analyzes entire early game, not just final stats
+- **Trend identification**: Detects when advantages were gained or lost
+- **Role-specific**: Compares only against the direct lane opponent
+- **Actionable feedback**: Provides specific improvement suggestions
+
+### AI Model Configuration
+
+- **Model**: OpenAI GPT-4o-mini
+- **Temperature**: 0.4 (balanced between creativity and consistency)
+- **Language**: Spanish (as configured in system prompt)
+- **Response length**: 4-6 sentences
+
+### Coaching Focus Areas
+
+1. **CS Efficiency**: Minion kills and jungle camp farming
+2. **Gold Generation**: Total and current gold comparison
+3. **Experience Gain**: XP and level progression
+4. **Timing Analysis**: When advantages/disadvantages occurred
+5. **Improvement Strategy**: Specific actionable recommendations
+
+<Note>
+  The AI analysis requires both `ENABLE_MATCH_AGENT=true` and a valid `OPENAI_KEY`. If either is missing, the endpoint still returns statistical comparison without the `comparison` field.
+</Note>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Laning Analysis" icon="sword">
+    Compare early-game performance to identify laning phase strengths and weaknesses
+  </Card>
+  
+  <Card title="CS Training" icon="coins">
+    Track farming efficiency over time against opponents
+  </Card>
+  
+  <Card title="Coaching Tools" icon="chalkboard-user">
+    Provide automated coaching feedback for players looking to improve
+  </Card>
+  
+  <Card title="Performance Tracking" icon="chart-line">
+    Monitor progression metrics across multiple games
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+1. **Use with recent matches**: Timeline data is most useful for analyzing recent games while they're fresh in memory
+2. **Configure comparison timeframe**: Adjust `TIMELINE_COMPARE` based on analysis needs (early game: 600000ms = 10 min)
+3. **Combine with match details**: Use alongside `/api/riot/match/matchId` for complete context
+4. **Handle missing opponents**: Not all games have clear lane opponents (especially in non-standard game modes)
+5. **Cache AI results**: AI analysis is expensive; consider caching comparison results client-side

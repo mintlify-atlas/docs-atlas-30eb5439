@@ -1,0 +1,268 @@
+---
+title: Stats Analysis
+description: Detailed match statistics including participant data, team performance, and timeline analysis
+icon: chart-line
+---
+
+## Overview
+
+Agent LoL provides comprehensive match statistics analysis, displaying detailed information about each player's performance, team dynamics, and minute-by-minute game progression. The stats analysis system processes data from the Riot API to give players actionable insights into their matches.
+
+## Participant Statistics
+
+The `Participants` component displays key stats for all 10 players in a match, with visual highlighting for the current user and their teammates.
+
+### Displayed Stats
+
+For each participant, the following information is shown:
+
+- **Champion played** - with champion icon from Data Dragon
+- **Win/Loss status** - color-coded badges
+- **Summoner name** and Riot ID
+- **KDA (Kills/Deaths/Assists)** - tabular format for easy comparison
+
+### Participant Display Code
+
+```jsx
+// src/components/Participants.js:50-91
+<div
+  key={p.puuid ?? i}
+  className={`px-5 py-3 sm:px-6 flex flex-wrap items-center gap-3 sm:gap-4 ${rowHighlight}`}
+>
+  {championIconUrl && (
+    <Image
+      src={championIconUrl}
+      alt={championName ?? 'Champion'}
+      title={championName ?? undefined}
+      width={40}
+      height={40}
+      className="rounded-lg object-cover border border-slate-600/60 shrink-0"
+    />
+  )}
+  {isCurrentUser && (
+    <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold bg-amber-600/80 text-amber-100 shrink-0">
+      You
+    </span>
+  )}
+  <span
+    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+      p.win ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/40 text-red-300'
+    }`}
+  >
+    {p.win ? 'Win' : 'Loss'}
+  </span>
+  <span
+    className={`text-sm font-medium ${
+      isCurrentUser ? 'text-amber-100' : isTeammate ? 'text-slate-200' : 'text-white'
+    }`}
+  >
+    {p.summonerName ?? p.riotIdGameName ?? 'Unknown'}
+  </span>
+  <span className="text-slate-500 text-sm">
+    {p.championName ?? `Champion ${p.championId ?? '?'}`}
+  </span>
+  <span className="text-slate-400 text-sm tabular-nums">
+    {p.kills ?? 0} / {p.deaths ?? 0} / {p.assists ?? 0} KDA
+  </span>
+</div>
+```
+
+### Visual Highlighting
+
+The UI uses color-coded highlighting to help users quickly identify key players:
+
+```javascript
+// src/components/Participants.js:44-48
+const rowHighlight = isCurrentUser
+  ? 'bg-amber-950/30 border-l-4 border-l-amber-500'
+  : isTeammate
+    ? 'bg-sky-950/35 border-l-2 border-l-sky-500'
+    : '';
+```
+
+<Note>
+- **Current user**: Amber highlight with thick left border
+- **Teammates**: Blue highlight with medium left border
+- **Opponents**: No special highlighting
+</Note>
+
+## Champion Icons from Data Dragon
+
+Champion images are loaded from Riot's Data Dragon CDN:
+
+```javascript
+// src/components/Participants.js:6-10
+const championImageId = (championName) => {
+  if (!championName || typeof championName !== 'string') return null;
+  return championName.replace(/\s+/g, '');
+};
+```
+
+```javascript
+// src/components/Participants.js:29-33
+const championIconUrl =
+  ddragonVersion && cid
+    ? `${DATA_DRAGON_BASE}/cdn/${ddragonVersion}/img/champion/${cid}.png`
+    : null;
+```
+
+<Tip>
+Champion names with spaces (e.g., "Aurelion Sol") are converted to "AurelionSol" to match Data Dragon's naming convention.
+</Tip>
+
+## Timeline Analysis
+
+The `TimelineReviewer` component provides minute-by-minute analysis of match progression, showing how the game evolved over time.
+
+### Minute-by-Minute Data
+
+For each minute of the game, the system tracks:
+
+- **CS (Creep Score)** - minions/monsters killed
+- **Gold** - total gold earned
+- **Level** - champion level
+- **Events** - kills, objectives, tower plates, etc.
+
+### Building Timeline Data
+
+```javascript
+// src/components/TimelineReviewer.js:7-18
+function buildMinuteByMinute(frames, userParticipantId, enemyParticipantId, maxMinutes) {
+  const list = [];
+  for (let i = 0; i < maxMinutes && i < frames.length; i++) {
+    const frame = frames[i];
+    const participantFrames = frame?.participantFrames ?? {};
+    const events = frame?.events ?? [];
+    const userFrame = userParticipantId ? participantFrames[userParticipantId] : null;
+    const enemyFrame = enemyParticipantId ? participantFrames[enemyParticipantId] : null;
+    list.push({ minute: i, userFrame, enemyFrame, events });
+  }
+  return list;
+}
+```
+
+### Event Tracking
+
+The system categorizes important game events:
+
+```javascript
+// src/components/TimelineReviewer.js:25-37
+function getEventLabels(events) {
+  return events
+    .filter((e) => ['CHAMPION_KILL', 'ELITE_MONSTER_KILL', 'BUILDING_KILL', 'TURRET_PLATE_DESTROYED'].includes(e?.type))
+    .map((e) =>
+      e.type === 'CHAMPION_KILL'
+        ? 'Kill'
+        : e.type === 'ELITE_MONSTER_KILL'
+          ? (e.monsterType ?? 'Objetivo')
+          : e.type === 'TURRET_PLATE_DESTROYED'
+            ? 'Placa'
+            : 'Torre'
+    );
+}
+```
+
+<Card title="Tracked Events" icon="calendar">
+  - **CHAMPION_KILL** - Player eliminations
+  - **ELITE_MONSTER_KILL** - Dragon, Baron, Herald
+  - **BUILDING_KILL** - Tower destructions
+  - **TURRET_PLATE_DESTROYED** - Tower plate gold
+</Card>
+
+### Narrative Generation
+
+The system generates human-readable descriptions of each minute:
+
+```javascript
+// src/components/TimelineReviewer.js:39-57
+function buildMinuteNarrative(minute, userFrame, enemyFrame, events, userChampion, enemyChampion) {
+  const userCs = userFrame?.minionsKilled ?? userFrame?.totalMinionsKilled ?? 0;
+  const userGold = userFrame?.totalGold ?? 0;
+  const userLevel = userFrame?.level ?? 0;
+  const enemyCs = enemyFrame?.minionsKilled ?? enemyFrame?.totalMinionsKilled ?? 0;
+  const enemyGold = enemyFrame?.totalGold ?? 0;
+  const enemyLevel = enemyFrame?.level ?? 0;
+  const eventLabels = getEventLabels(events);
+  const userName = userChampion ?? 'Tu personaje';
+  const rivalName = enemyChampion ?? 'el rival';
+
+  if (minute === 0) {
+    const eventsPhrase = eventLabels.length > 0 ? ` Eventos: ${eventLabels.join(', ')}.` : '';
+    return `${userName} comenzó con ${userGold} de oro, ${userCs} minion${userCs !== 1 ? 's' : ''} asesinado${userCs !== 1 ? 's' : ''}, nivel ${userLevel}. ${rivalName} tenía ${enemyGold} de oro, ${enemyCs} minion${enemyCs !== 1 ? 's' : ''}, nivel ${enemyLevel}.${eventsPhrase}`;
+  }
+
+  const eventsPhrase = eventLabels.length > 0 ? ` Eventos en este minuto: ${eventLabels.join(', ')}.` : '';
+  return `A ${formatGameTime(minute)}, ${userName} tenía ${userCs} CS, ${userGold} de oro, nivel ${userLevel}. ${rivalName}: ${enemyCs} CS, ${enemyGold} de oro, nivel ${enemyLevel}.${eventsPhrase}`;
+}
+```
+
+## Timeline Display
+
+The timeline is rendered as a scrollable list with formatted game time and narrative descriptions:
+
+```jsx
+// src/components/TimelineReviewer.js:98-110
+<div className="space-y-4 max-h-[50vh] overflow-auto">
+  {minuteByMinute.map(({ minute, userFrame, enemyFrame, events }) => (
+    <div key={minute}>
+      <p className="font-mono font-medium text-slate-300 mb-1">
+        {formatGameTime(minute)}
+      </p>
+      <p className="text-slate-400 leading-relaxed">
+        {buildMinuteNarrative(minute, userFrame, enemyFrame, events, userChampion, enemyChampion)}
+      </p>
+    </div>
+  ))}
+  {/* AI recommendations section... */}
+</div>
+```
+
+## Configuration
+
+The timeline analysis duration can be configured via environment variables:
+
+```javascript
+// src/components/TimelineReviewer.js:66-70
+const timelineCompareMs = Math.max(0, parseInt(process.env.NEXT_PUBLIC_TIMELINE_COMPARE || '0', 10));
+const frames = timelineData?.info?.frames ?? [];
+const frameInterval = timelineData?.info?.frameInterval ?? 60000;
+const maxMinutes =
+  timelineCompareMs > 0 ? Math.ceil(timelineCompareMs / frameInterval) : frames.length;
+```
+
+<Warning>
+Set `NEXT_PUBLIC_TIMELINE_COMPARE` in milliseconds to limit the analysis window. For example, `600000` = 10 minutes.
+</Warning>
+
+## Raw Data Inspection
+
+Users can view raw frame data for debugging or detailed analysis:
+
+```jsx
+// src/components/TimelineReviewer.js:119-132
+{timelineCompare?.userFrame && timelineCompare?.enemyFrame && (
+  <details className="mt-4">
+    <summary className="text-xs text-slate-500 cursor-pointer">
+      Ver datos crudos ({formatGameTime(timelineCompare.frameMinute ?? 0)})
+    </summary>
+    <pre className="mt-2 text-xs overflow-auto max-h-40 bg-slate-900/50 p-3 rounded">
+      {JSON.stringify(
+        { tú: timelineCompare.userFrame, rival: timelineCompare.enemyFrame },
+        null,
+        2
+      )}
+    </pre>
+  </details>
+)}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="AI Coaching" icon="robot" href="/features/ai-coaching">
+    Get personalized coaching from GPT-4 analysis
+  </Card>
+  <Card title="Replay Viewer" icon="video" href="/features/replay-viewer">
+    Watch matches in 2.5D with Three.js
+  </Card>
+</CardGroup>

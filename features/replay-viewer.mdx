@@ -1,0 +1,437 @@
+---
+title: Replay Viewer
+description: Watch League of Legends matches in 2.5D with Three.js and React Three Fiber
+icon: video
+---
+
+## Overview
+
+The Replay Viewer is a 2.5D visualization system built with Three.js and React Three Fiber that renders League of Legends matches in real-time. It uses timeline data from the Riot API to interpolate player positions and display an interactive replay of the match.
+
+<Note>
+The replay viewer provides a bird's-eye view of the match with smooth interpolation between timeline frames.
+</Note>
+
+## Architecture
+
+The replay system consists of several key components:
+
+```
+ReplayCanvas (Container)
+  ├─ Controls (Play/Pause, Speed, Timeline slider)
+  └─ Three.js Canvas
+      └─ ReplayScene
+          ├─ MapPlane (Summoner's Rift floor)
+          ├─ Champion meshes (×10)
+          ├─ Lighting
+          └─ OrbitControls (camera)
+```
+
+## Replay Engine
+
+The `useReplayEngine` hook is the core of the replay system, handling position interpolation between timeline frames.
+
+### Frame Interpolation
+
+Timeline frames are captured every 60 seconds (60,000ms). The engine interpolates player positions between frames for smooth animation:
+
+```javascript
+// src/components/replay/useReplayEngine.js:29-44
+function computeInterpolatedPlayers(timelineFrames, currentTimeMs) {
+  if (!timelineFrames?.length) return [];
+
+  const frames = timelineFrames;
+  const idx = findFrameIndex(frames, currentTimeMs);
+
+  const frameA = frames[idx];
+  const timeA = getFrameTime(frameA, idx);
+  const frameB = frames[idx + 1];
+  const timeB = frameB != null ? getFrameTime(frameB, idx + 1) : timeA;
+  const progress =
+    timeB > timeA ? (currentTimeMs - timeA) / (timeB - timeA) : 1;
+
+  const pfA = frameA.participantFrames ?? {};
+  const pfB = frameB?.participantFrames ?? {};
+  // ...
+}
+```
+
+<Tip>
+Interpolation progress is calculated as: `(currentTime - frameATime) / (frameBTime - frameATime)`
+
+This produces smooth motion even though frames are 60 seconds apart.
+</Tip>
+
+### Linear Interpolation (Lerp)
+
+Player positions are interpolated using linear interpolation:
+
+```javascript
+// src/components/replay/utils.js:16-19
+export function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+```
+
+```javascript
+// src/components/replay/useReplayEngine.js:70-75
+result.push({
+  participantId,
+  teamId,
+  x: lerp(posA.x, posB.x, progress),
+  y: lerp(posA.y, posB.y, progress),
+});
+```
+
+### Fallback Positions
+
+If position data is missing (early game, respawning, etc.), the system uses intelligent fallback positions based on team and player index:
+
+```javascript
+// src/components/replay/useReplayEngine.js:51-60
+const getFallbackPosition = (participantId, teamId) => {
+  const idx = parseInt(participantId, 10) || 0;
+  const spread = 800;
+  const isRed = teamId === 200;
+  const i = isRed ? Math.min(Math.max(0, idx - 6), 4) : Math.min(Math.max(0, idx - 1), 4);
+  if (isRed) {
+    return { x: 14500 - i * spread * 0.6, y: 14500 - i * spread * 0.4 };
+  }
+  return { x: 500 + i * spread * 0.6, y: 500 + i * spread * 0.4 };
+};
+```
+
+<Card title="Fallback Logic" icon="map">
+  - Blue team (100): Spawns near bottom-left corner (500, 500)
+  - Red team (200): Spawns near top-right corner (14500, 14500)
+  - Players are spread out to avoid overlap
+</Card>
+
+## Coordinate System
+
+Riot API coordinates range from 0 to 15,000 with the center at approximately 7,500. These are mapped to Three.js world space:
+
+```javascript
+// src/components/replay/utils.js:5-14
+export const WORLD_Y = 5;
+
+export function mapToWorld(x, y) {
+  return {
+    worldX: x - 7500,
+    worldZ: y - 7500,
+    worldY: WORLD_Y,
+  };
+}
+```
+
+<Steps>
+  <Step title="Riot Coordinates">
+    Range: 0–15,000 for both X and Y
+    Center: ~7,500
+  </Step>
+  
+  <Step title="Three.js Coordinates">
+    X: -7,500 to +7,500 (left to right)
+    Z: -7,500 to +7,500 (top to bottom)
+    Y: Fixed at 5 (above map plane)
+  </Step>
+</Steps>
+
+## React Three Fiber Components
+
+### ReplayCanvas
+
+The main container component that manages state and renders the Three.js scene:
+
+```jsx
+// src/components/replay/ReplayCanvas.jsx:38-49
+export function ReplayCanvas({ timelineFrames, matchDurationMs, initialTimeMs = 0 }) {
+  const [currentTime, setCurrentTime] = useState(() =>
+    Math.min(Math.max(0, initialTimeMs), matchDurationMs || 0)
+  );
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+
+  const handleSliderChange = useCallback((e) => {
+    setCurrentTime(Number(e.target.value));
+  }, []);
+  // ...
+}
+```
+
+### Canvas Configuration
+
+The Three.js canvas is configured for optimal performance:
+
+```jsx
+// src/components/replay/ReplayCanvas.jsx:94-107
+<Canvas
+  frameloop="always"
+  dpr={[1, 2]}
+  camera={{ position: [0, 12000, 12000], fov: 45, near: 10, far: 25000 }}
+  gl={{
+    antialias: true,
+    alpha: false,
+    powerPreference: 'high-performance',
+  }}
+  onCreated={({ gl, camera }) => {
+    gl.setClearColor('#0f172a');
+    camera.lookAt(0, 0, 0);
+  }}
+  style={{ display: 'block', width: '100%', height: '100%' }}
+>
+```
+
+<Card title="Canvas Settings" icon="gear">
+  - **DPR**: 1-2 for Retina displays
+  - **Camera**: Positioned at (0, 12000, 12000) for isometric view
+  - **FOV**: 45° field of view
+  - **Near/Far**: Clipping planes at 10 and 25,000 units
+  - **Power preference**: High performance mode
+</Card>
+
+### MapPlane
+
+The map plane represents Summoner's Rift as a 15,000×15,000 unit green plane:
+
+```jsx
+// src/components/replay/MapPlane.jsx:9-16
+export function MapPlane() {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+      <planeGeometry args={[15000, 15000]} />
+      <meshStandardMaterial color="#1e4620" side={DoubleSide} />
+    </mesh>
+  );
+}
+```
+
+<Note>
+The plane is rotated -90° around the X-axis to lay flat (horizontal) in the scene.
+</Note>
+
+### Champion Meshes
+
+Each champion is rendered as a colored sphere with team-based colors:
+
+```jsx
+// src/components/replay/Champion.jsx:5-20
+const TEAM_COLORS = {
+  100: '#3a7bd5',
+  200: '#c23616',
+};
+
+export function Champion({ x, y, teamId }) {
+  const { worldX, worldY, worldZ } = mapToWorld(x, y);
+  const color = TEAM_COLORS[teamId] ?? '#888888';
+
+  return (
+    <mesh position={[worldX, worldY, worldZ]}>
+      <sphereGeometry args={[100, 16, 16]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
+  );
+}
+```
+
+<Card title="Team Colors" icon="palette">
+  - **Blue Team (100)**: `#3a7bd5` (Blue)
+  - **Red Team (200)**: `#c23616` (Red)
+  - **Unknown**: `#888888` (Gray)
+</Card>
+
+## Replay Controls
+
+The UI provides intuitive controls for playback:
+
+### Play/Pause Button
+
+```jsx
+// src/components/replay/ReplayCanvas.jsx:52-58
+<button
+  type="button"
+  onClick={() => setIsPlaying((p) => !p)}
+  className="rounded-lg bg-amber-500/90 px-4 py-2 text-sm font-medium text-slate-900 hover:bg-amber-400"
+>
+  {isPlaying ? 'Pause' : 'Play'}
+</button>
+```
+
+### Speed Controls
+
+Users can adjust playback speed (1x, 2x, 4x):
+
+```jsx
+// src/components/replay/ReplayCanvas.jsx:59-75
+<div className="flex items-center gap-2">
+  <span className="text-xs text-slate-500">Speed</span>
+  {[1, 2, 4].map((s) => (
+    <button
+      key={s}
+      type="button"
+      onClick={() => setSpeed(s)}
+      className={`rounded px-3 py-1 text-sm ${
+        speed === s
+          ? 'bg-amber-500/90 text-slate-900'
+          : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600'
+      }`}
+    >
+      {s}x
+    </button>
+  ))}
+</div>
+```
+
+### Timeline Slider
+
+An interactive slider allows users to scrub through the replay:
+
+```jsx
+// src/components/replay/ReplayCanvas.jsx:76-88
+<div className="flex flex-1 min-w-[120px] items-center gap-2">
+  <span className="text-xs text-slate-500 whitespace-nowrap">
+    {Math.floor(currentTime / 60000)}:{(Math.floor(currentTime / 1000) % 60).toString().padStart(2, '0')}
+  </span>
+  <input
+    type="range"
+    min={0}
+    max={matchDurationMs}
+    value={currentTime}
+    onChange={handleSliderChange}
+    className="flex-1 h-2 rounded-full bg-slate-700 accent-amber-500"
+  />
+</div>
+```
+
+## Time Advancement
+
+The `useReplayTimeAdvance` hook automatically advances the replay time when playing:
+
+```javascript
+// src/components/replay/useReplayEngine.js:97-106
+export function useReplayTimeAdvance(isPlaying, speed, matchDurationMs, setCurrentTime) {
+  useFrame((_, delta) => {
+    if (!isPlaying) return;
+    const cappedDelta = Math.min(delta, MAX_DELTA_SEC);
+    setCurrentTime((prev) => {
+      const next = prev + cappedDelta * 1000 * speed;
+      return Math.min(Math.max(0, next), matchDurationMs);
+    });
+  });
+}
+```
+
+<Warning>
+Delta is capped at 0.25 seconds to prevent huge jumps when the tab loses focus or the user switches windows.
+</Warning>
+
+### Frame Delta Capping
+
+```javascript
+// src/components/replay/useReplayEngine.js:91-92
+const MAX_DELTA_SEC = 0.25;
+```
+
+This prevents the replay from jumping to the end if the browser tab is inactive for a long period.
+
+## Scene Rendering
+
+The `ReplayScene` component brings everything together:
+
+```jsx
+// src/components/replay/ReplayCanvas.jsx:10-36
+function ReplayScene({
+  timelineFrames,
+  matchDurationMs,
+  currentTime,
+  setCurrentTime,
+  isPlaying,
+  speed,
+}) {
+  useReplayTimeAdvance(isPlaying, speed, matchDurationMs, setCurrentTime);
+  const interpolatedPlayers = useReplayEngine(timelineFrames, currentTime);
+  return (
+    <>
+      <ambientLight intensity={0.7} />
+      <directionalLight position={[0, 10000, 0]} intensity={1} />
+      <MapPlane />
+      {interpolatedPlayers.map((p) => (
+        <Champion
+          key={p.participantId}
+          x={p.x}
+          y={p.y}
+          teamId={p.teamId}
+        />
+      ))}
+      <OrbitControls />
+    </>
+  );
+}
+```
+
+### Lighting
+
+The scene uses two light sources:
+
+- **Ambient Light**: 70% intensity for overall illumination
+- **Directional Light**: Top-down light from (0, 10000, 0) at 100% intensity
+
+### Camera Controls
+
+OrbitControls from `@react-three/drei` allow users to:
+- Rotate the camera by dragging
+- Zoom in/out with mouse wheel
+- Pan the view with right-click drag
+
+## Accessing the Replay
+
+Replays are accessed via the match display with a direct link:
+
+```jsx
+// src/components/LatestMatch.js:118-123
+{firstMatchId && (
+  <Link
+    href={`/replay?matchId=${encodeURIComponent(firstMatchId)}`}
+    className="ml-auto text-sm font-medium text-amber-400 hover:text-amber-300"
+  >
+    View 2.5D replay
+  </Link>
+)}
+```
+
+## Performance Considerations
+
+<Steps>
+  <Step title="Memoization">
+    The `useReplayEngine` hook uses `useMemo` to avoid recalculating positions unnecessarily.
+    
+    ```javascript
+    // src/components/replay/useReplayEngine.js:84-89
+    export function useReplayEngine(timelineFrames, currentTimeMs) {
+      return useMemo(
+        () => computeInterpolatedPlayers(timelineFrames, currentTimeMs),
+        [timelineFrames, currentTimeMs]
+      );
+    }
+    ```
+  </Step>
+  
+  <Step title="Frame Delta Capping">
+    Large deltas are capped to prevent performance issues from sudden jumps.
+  </Step>
+  
+  <Step title="High Performance GL Context">
+    The WebGL context uses `powerPreference: 'high-performance'` for better GPU utilization.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Match Lookup" icon="magnifying-glass" href="/features/match-lookup">
+    Learn how to search for matches
+  </Card>
+  <Card title="Stats Analysis" icon="chart-line" href="/features/stats-analysis">
+    Understand match statistics
+  </Card>
+</CardGroup>

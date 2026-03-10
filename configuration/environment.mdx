@@ -1,0 +1,173 @@
+---
+title: 'Environment Variables'
+description: 'Configure Agent LoL with environment variables for Riot API, OpenAI, and authentication'
+icon: 'gear'
+---
+
+## Overview
+
+Agent LoL uses environment variables to configure API keys, authentication, and application features. Copy `.env.example` to `.env.local` and configure the required variables.
+
+```bash
+cp .env.example .env.local
+```
+
+## Required Variables
+
+These variables are essential for the application to function.
+
+<ParamField path="API_KEY" type="string" required>
+  Your Riot Games API key from [developer.riotgames.com](https://developer.riotgames.com/)
+  
+  <Warning>
+    Development keys expire every 24 hours and must be regenerated daily.
+  </Warning>
+
+  ```bash
+  API_KEY=RGAPI-your-api-key-here
+  ```
+</ParamField>
+
+<ParamField path="GAME_NAME" type="string" required>
+  Your League of Legends summoner name (without the tag)
+  
+  Used for PUUID retrieval and UI display throughout the application.
+
+  ```bash
+  GAME_NAME=YourGameName
+  ```
+</ParamField>
+
+<ParamField path="TAG_LINE" type="string" required>
+  Your Riot ID tag line (the numbers after the # in your Riot ID)
+  
+  Do not include the # symbol - only the alphanumeric tag.
+
+  ```bash
+  TAG_LINE=1234
+  ```
+</ParamField>
+
+<ParamField path="AUTH_SECRET" type="string" required>
+  Secret key for NextAuth.js session cookie encryption
+  
+  <Tip>
+    Generate a secure random secret using the Auth.js CLI:
+    ```bash
+    npx auth secret
+    ```
+  </Tip>
+
+  This command automatically generates a cryptographically secure secret and adds it to your `.env.local` file.
+
+  ```bash
+  AUTH_SECRET=your-generated-secret-here
+  ```
+</ParamField>
+
+## Optional Variables
+
+These variables enable additional features and customization.
+
+### OpenAI Integration
+
+<ParamField path="OPENAI_KEY" type="string">
+  Your OpenAI API key for AI-powered coaching features
+  
+  Required only if you want to enable the match context agent. Get your key from [platform.openai.com](https://platform.openai.com/api-keys).
+
+  ```bash
+  OPENAI_KEY=sk-your-openai-key-here
+  ```
+</ParamField>
+
+<ParamField path="ENABLE_MATCH_AGENT" type="boolean" default="false">
+  Enable or disable the AI coaching agent
+  
+  Set to `true` to activate GPT-4-mini powered analysis of match timelines. Requires `OPENAI_KEY` to be configured.
+
+  ```bash
+  ENABLE_MATCH_AGENT=true
+  ```
+</ParamField>
+
+### Timeline Configuration
+
+<ParamField path="TIMELINE_COMPARE" type="number" default="180000">
+  Timestamp in milliseconds for AI comparison and analysis
+  
+  Determines which point in the match timeline the AI agent analyzes. Common values:
+  - `60000` = 1 minute
+  - `180000` = 3 minutes (default)
+  - `300000` = 5 minutes
+
+  ```bash
+  TIMELINE_COMPARE=180000
+  ```
+</ParamField>
+
+<ParamField path="NEXT_PUBLIC_TIMELINE_COMPARE" type="number" default="180000">
+  Client-side timeline start position for the 2.5D replay viewer
+  
+  <Note>
+    The `NEXT_PUBLIC_` prefix makes this variable accessible in client-side code. It should match the value of `TIMELINE_COMPARE` to ensure the replay starts at the same time analyzed by the AI.
+  </Note>
+
+  ```bash
+  NEXT_PUBLIC_TIMELINE_COMPARE=180000
+  ```
+</ParamField>
+
+## Client-Side Variables
+
+Variables prefixed with `NEXT_PUBLIC_` are exposed to the browser and can be accessed in client-side React components.
+
+<Warning>
+  Never use `NEXT_PUBLIC_` prefix for sensitive data like API keys or secrets, as these values will be visible in the browser.
+</Warning>
+
+Currently, only `NEXT_PUBLIC_TIMELINE_COMPARE` uses this prefix to configure the replay viewer's start position.
+
+## Example Configuration
+
+Here's a complete example with all variables configured:
+
+```bash .env.local
+# Riot Games API (Required)
+API_KEY=RGAPI-12345678-abcd-1234-abcd-123456789abc
+GAME_NAME=YourSummonerName
+TAG_LINE=NA1
+
+# Authentication (Required)
+AUTH_SECRET=your-generated-secret-from-npx-auth-secret
+
+# OpenAI Features (Optional)
+OPENAI_KEY=sk-proj-abc123xyz789
+ENABLE_MATCH_AGENT=true
+
+# Timeline Settings (Optional)
+TIMELINE_COMPARE=180000
+NEXT_PUBLIC_TIMELINE_COMPARE=180000
+```
+
+## Environment-Specific Files
+
+Next.js supports multiple environment files with different priorities:
+
+- `.env.local` - Loaded in all environments, gitignored by default
+- `.env.development` - Loaded during `npm run dev`
+- `.env.production` - Loaded during `npm run build` and `npm start`
+
+<Tip>
+  Use `.env.local` for local development and keep it out of version control. Production deployments should use environment variables configured in your hosting platform (Vercel, Railway, etc.).
+</Tip>
+
+## Validation
+
+The application validates required credentials during authentication in `auth.js:10-19`:
+
+- **Game Name**: Must be at least 2 characters
+- **Tag Line**: Required (automatically strips the # prefix)
+- **API Key**: Required
+
+If validation fails, you'll see descriptive error messages during sign-in.

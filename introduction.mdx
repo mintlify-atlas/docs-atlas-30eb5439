@@ -1,0 +1,80 @@
+---
+title: "Introduction"
+description: "Level up your League of Legends gameplay with AI-powered match analysis and coaching"
+---
+
+<img
+  className="block dark:hidden"
+  src="https://media.brand.dev/1f1e4836-c9b0-4d21-a221-1411146261a9.svg"
+  alt="Agent LoL Logo"
+/>
+<img
+  className="hidden dark:block"
+  src="https://media.brand.dev/862e10d4-beb2-49d1-91ee-e52387c286bd.png"
+  alt="Agent LoL Logo"
+/>
+
+# Welcome to Agent LoL
+
+Agent LoL is a League of Legends stats and coaching platform that helps you understand your gameplay and improve faster. Powered by the Riot Games API and AI-driven analysis, it provides detailed match breakdowns, performance metrics, and personalized coaching recommendations.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Match Lookup" icon="magnifying-glass" href="/features/match-lookup">
+    Search and view detailed statistics for any League of Legends match
+  </Card>
+  <Card title="Stats Analysis" icon="chart-line" href="/features/stats-analysis">
+    Deep dive into player performance with comprehensive statistics
+  </Card>
+  <Card title="AI Coaching" icon="brain" href="/features/ai-coaching">
+    Get personalized improvement tips powered by OpenAI
+  </Card>
+  <Card title="Replay Viewer" icon="video" href="/features/replay-viewer">
+    Watch 2.5D match replays with timeline visualization
+  </Card>
+</CardGroup>
+
+## How It Works
+
+Agent LoL integrates with the Riot Games API to fetch real-time match data for any summoner. The platform analyzes your gameplay minute-by-minute, comparing your performance against opponents in the same role. Using AI, it identifies critical moments where you fell behind or gained advantages, then provides actionable coaching feedback to help you improve.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get started in under 5 minutes
+  </Card>
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn how to authenticate with Riot API
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the API endpoints
+  </Card>
+  <Card title="Configuration" icon="gear" href="/configuration/environment">
+    Configure your environment
+  </Card>
+</CardGroup>
+
+## What You'll Need
+
+- **Riot Games API Key**: Get a free development key from the [Riot Developer Portal](https://developer.riotgames.com/)
+- **League of Legends Account**: Your summoner name and tag line
+- **OpenAI API Key** (optional): Enable AI-powered coaching recommendations
+
+<Note>
+Development API keys from Riot Games expire every 24 hours. You'll need to regenerate your key daily for continuous access.
+</Note>
+
+## Technology Stack
+
+Agent LoL is built with modern web technologies:
+
+- **Next.js 16** - React framework with App Router
+- **NextAuth** - Authentication with Riot credentials
+- **React Query** - Data fetching and caching
+- **Three.js & React Three Fiber** - 2.5D replay visualization
+- **Tailwind CSS** - Styling and design system
+- **OpenAI GPT-4** - AI-powered coaching analysis
+
+## Get Started
+
+Ready to level up your League of Legends gameplay? Follow our [quickstart guide](/quickstart) to set up Agent LoL in minutes.

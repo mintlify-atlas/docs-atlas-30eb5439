@@ -1,80 +1,186 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get started with Agent LoL in under 5 minutes'
 ---
 
-## Get started in three steps
+Get your League of Legends match analysis up and running with AI-powered coaching in minutes.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Node.js 18+** installed on your machine
+- **npm, yarn, pnpm, or bun** package manager
+- A **Riot Games developer account** (free to create)
 
-### Step 2: Deploy your changes
+<Steps>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+### Get Your Riot API Key
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+You'll need a Riot Games API key to authenticate requests to their API.
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+1. Visit [developer.riotgames.com](https://developer.riotgames.com/)
+2. Sign in with your Riot Games account
+3. Navigate to the dashboard and generate a new **Development API Key**
 
-### Step 3: Go live
+<Warning>
+Development API keys expire every 24 hours. You'll need to regenerate them daily or apply for a production key.
+</Warning>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+### Clone and Install Dependencies
 
-## Next steps
+Clone the repository and install the required packages:
 
-Now that you have your docs running, explore these key features:
+<CodeGroup>
+```bash npm
+npm install
+```
 
-<CardGroup cols={2}>
+```bash yarn
+yarn install
+```
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+```bash pnpm
+pnpm install
+```
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+```bash bun
+bun install
+```
+</CodeGroup>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+### Configure Environment Variables
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+Create a `.env.local` file in the root directory based on `.env.example`:
 
-</CardGroup>
+```bash
+cp .env.example .env.local
+```
+
+Update the following required variables:
+
+```bash .env.local
+# Riot Games API key (development keys expire every 24h)
+# Get yours at: https://developer.riotgames.com/
+API_KEY=RGAPI-your-api-key-here
+
+# Summoner Riot ID used for get-puuid and UI display
+GAME_NAME=YourGameName
+TAG_LINE=1234
+
+# Auth (required for auth.js session cookie encryption)
+# Generate with: npx auth secret
+AUTH_SECRET=
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The `GAME_NAME` and `TAG_LINE` are your default summoner credentials used for initial setup. Users can sign in with their own Riot IDs through the login page.
 </Note>
+
+#### Generate AUTH_SECRET
+
+NextAuth requires a secret for encrypting session cookies. Generate one using:
+
+```bash
+npx auth secret
+```
+
+Copy the generated secret and paste it into your `.env.local` file.
+
+#### Optional: Enable AI Coaching
+
+To enable AI-powered match analysis with OpenAI:
+
+```bash .env.local
+# Optional: OpenAI key for match context agent
+OPENAI_KEY=sk-your-openai-key
+ENABLE_MATCH_AGENT=true
+
+# Timeline compare: value in milliseconds for AI comparison
+TIMELINE_COMPARE=180000
+NEXT_PUBLIC_TIMELINE_COMPARE=180000
+```
+
+### Run the Development Server
+
+Start the Next.js development server:
+
+<CodeGroup>
+```bash npm
+npm run dev
+```
+
+```bash yarn
+yarn dev
+```
+
+```bash pnpm
+pnpm dev
+```
+
+```bash bun
+bun dev
+```
+</CodeGroup>
+
+The application will be available at [http://localhost:3000](http://localhost:3000).
+
+### Sign In and View Your First Match
+
+1. **Navigate to the login page** - You'll be automatically redirected if not authenticated
+2. **Enter your credentials:**
+   - **Game Name**: Your Riot ID without the tag (e.g., `Faker`)
+   - **Tag Line**: Your tag without the `#` symbol (e.g., `KR1`)
+   - **API Key**: Paste the Riot API key you generated in step 1
+
+3. **Click "Sign in"** - The app will validate your credentials against the Riot API
+4. **View your matches** - Once authenticated, you'll see your match history with detailed stats
+
+<Tip>
+The API key is only used on the server and never exposed to the client. It's securely stored in your JWT session token.
+</Tip>
+
+</Steps>
+
+## What's Next?
+
+Now that you're up and running:
+
+<CardGroup cols={2}>
+<Card title="Authentication" icon="lock" href="/authentication">
+  Learn how NextAuth secures your Riot credentials
+</Card>
+
+<Card title="API Reference" icon="code" href="/api/overview">
+  Explore the Riot API integration
+</Card>
+</CardGroup>
+
+## Troubleshooting
+
+### "Invalid API key or Riot account"
+
+This error occurs when:
+- Your API key has expired (development keys last 24 hours)
+- The API key is incorrectly formatted
+- Your Game Name or Tag Line is incorrect
+
+**Solution**: Generate a new API key from the [Riot Developer Portal](https://developer.riotgames.com/).
+
+### "Riot ID not found"
+
+Double-check that your Game Name and Tag Line are correct. You can verify them in the League of Legends client.
+
+### "Too many requests"
+
+Development API keys have rate limits (20 requests per second, 100 per 2 minutes). Wait a moment and try again.
+
+### Session Cookie Errors
+
+If you see authentication errors, ensure your `AUTH_SECRET` is properly set:
+
+```bash
+npx auth secret
+```
+
+Add the output to your `.env.local` file.

@@ -1,0 +1,159 @@
+---
+title: 'Account Endpoints'
+description: 'Retrieve player account information and Riot IDs'
+---
+
+## Overview
+
+The Account endpoints provide access to player identification data, including PUUIDs and Riot IDs. These endpoints are essential for retrieving the unique identifiers needed to query match data.
+
+<Note>
+  **PUUID** (Player Universally Unique Identifier) is Riot's internal identifier for players across all regions. It remains constant even if a player changes their Riot ID.
+</Note>
+
+## Get PUUID
+
+<Endpoint method="GET" path="/api/riot/account/get-puuid" />
+
+Retrieves the current authenticated user's PUUID and Riot ID from their session.
+
+### Authentication
+
+Requires valid NextAuth session. Returns current user's data only.
+
+### Response
+
+<ResponseField name="puuid" type="string" required>
+  Player's unique identifier (PUUID)
+</ResponseField>
+
+<ResponseField name="gameName" type="string" required>
+  Player's Riot ID game name (without tag)
+</ResponseField>
+
+<ResponseField name="tagLine" type="string" required>
+  Player's Riot ID tag line (without # symbol)
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/riot/account/get-puuid' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_TOKEN'
+```
+
+```javascript JavaScript
+const response = await fetch('/api/riot/account/get-puuid');
+const data = await response.json();
+console.log(data.puuid); // "abc123..."
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "puuid": "abc123-def456-ghi789-jkl012-mno345",
+  "gameName": "PlayerName",
+  "tagLine": "NA1"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+</CodeGroup>
+
+---
+
+## Get Riot ID
+
+<Endpoint method="GET" path="/api/riot/account/get-riotid" />
+
+Fetches Riot ID information (game name and tag line) for a given PUUID from the Riot API.
+
+### Authentication
+
+Requires valid NextAuth session. Only allows querying the authenticated user's own PUUID.
+
+### Query Parameters
+
+<ParamField query="puuid" type="string" optional>
+  Player's PUUID to look up. Defaults to current user's PUUID if not provided.
+</ParamField>
+
+<Warning>
+  You can only query your own PUUID. Attempting to query another player's PUUID will return `403 Forbidden`.
+</Warning>
+
+### Response
+
+Returns the Riot Account-v1 response from `https://americas.api.riotgames.com/riot/account/v1/accounts/by-puuid/{puuid}`
+
+<ResponseField name="puuid" type="string" required>
+  Player's unique identifier
+</ResponseField>
+
+<ResponseField name="gameName" type="string" required>
+  Player's Riot ID game name
+</ResponseField>
+
+<ResponseField name="tagLine" type="string" required>
+  Player's Riot ID tag line
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```bash cURL
+curl -X GET 'http://localhost:3000/api/riot/account/get-riotid?puuid=abc123-def456' \
+  -H 'Cookie: next-auth.session-token=YOUR_SESSION_TOKEN'
+```
+
+```javascript JavaScript
+const puuid = 'abc123-def456-ghi789';
+const response = await fetch(`/api/riot/account/get-riotid?puuid=${puuid}`);
+const data = await response.json();
+console.log(`${data.gameName}#${data.tagLine}`);
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Response
+{
+  "puuid": "abc123-def456-ghi789-jkl012-mno345",
+  "gameName": "PlayerName",
+  "tagLine": "NA1"
+}
+```
+
+```json 403 Forbidden
+{
+  "error": "Forbidden"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Failed to fetch from Riot API"
+}
+```
+</CodeGroup>
+
+## Understanding PUUIDs
+
+The PUUID is the primary identifier used throughout the Agent LoL API:
+
+- **Permanent**: Unlike summoner names or Riot IDs, PUUIDs never change
+- **Cross-region**: The same PUUID works across all Riot regions
+- **Required for matches**: All match-related endpoints require a PUUID
+- **Format**: Long alphanumeric string with hyphens
+
+### Typical Workflow
+
+1. Call `/api/riot/account/get-puuid` to get the current user's PUUID
+2. Store the PUUID for subsequent API calls
+3. Use the PUUID to query match history and game data
+4. Optionally call `/api/riot/account/get-riotid` to display human-readable names
