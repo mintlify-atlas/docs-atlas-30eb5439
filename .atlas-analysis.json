@@ -1,0 +1,74 @@
+{
+  "projectType": "saas",
+  "projectName": "Agent LoL",
+  "projectDescription": "League of Legends match lookup and stats powered by the Riot API with AI-driven game analysis and improvement suggestions.",
+  "theme": "almond",
+  "primaryColor": "#7c7c7c",
+  "lightColor": "#c4c4c4",
+  "darkColor": "#070707",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/match-lookup",
+              "features/stats-analysis",
+              "features/ai-coaching",
+              "features/replay-viewer"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment",
+              "configuration/riot-api",
+              "configuration/openai"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/overview",
+              "api/account",
+              "api/matches",
+              "api/timeline"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Riot Games API integration for match data retrieval",
+    "Real-time match statistics and participant analysis",
+    "AI-powered coaching recommendations using OpenAI",
+    "2.5D match replay visualization with Three.js",
+    "NextAuth authentication with Riot credentials",
+    "Timeline-based performance comparison"
+  ],
+  "publicApiSurface": [
+    "/api/riot/account/get-puuid",
+    "/api/riot/account/get-riotid",
+    "/api/riot/match/by-puuid/ids",
+    "/api/riot/match/matchId",
+    "/api/riot/match/timeline",
+    "/api/riot/match/timeline/compare",
+    "/api/ddragon/version"
+  ]
+}
